@@ -1,88 +1,92 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Coverage Dashboard</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    body { font-family: Arial, sans-serif; margin: 40px; background: #f9f9f9; }
+    body { font-family: Arial, sans-serif; padding: 2rem; background: #f7f9fc; }
     h1 { color: #333; }
-    .project { margin-bottom: 40px; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px #ccc; }
-    canvas { max-width: 500px; }
+    .project { margin-bottom: 3rem; }
+    canvas { max-width: 600px; }
   </style>
 </head>
 <body>
-  <h1>📊 Code Coverage Dashboard</h1>
+  <h1>📊 Cobertura de Pruebas - Histórico</h1>
 
   <div class="project" id="project-a">
     <h2>🐍 Project A (Python)</h2>
-    <p><a href="data/project-a/coverage.xml" target="_blank">Ver cobertura completa</a></p>
     <canvas id="chart-a"></canvas>
   </div>
 
   <div class="project" id="project-b">
     <h2>🟦 Project B (Node.js)</h2>
-    <p><a href="data/project-b/lcov.info" target="_blank">Ver cobertura completa</a></p>
     <canvas id="chart-b"></canvas>
   </div>
 
   <script>
-    async function loadCoverageXML(url) {
-      const res = await fetch(url);
+    async function fetchCoverageData(projectId, chartId) {
+      const res = await fetch(`data/${projectId}/`);
       const text = await res.text();
       const parser = new DOMParser();
-      const xml = parser.parseFromString(text, "application/xml");
-      const metrics = xml.querySelector("coverage")?.getAttribute("line-rate");
-      if (!metrics) return [0, 100];
-      const covered = parseFloat(metrics) * 100;
-      return [Math.round(covered), Math.round(100 - covered)];
-    }
+      const html = parser.parseFromString(text, "text/html");
+      const links = [...html.querySelectorAll("a")].map(a => a.getAttribute("href")).filter(h => h.endsWith(".xml") || h.endsWith(".info"));
 
-    async function loadLCOV(url) {
-      const res = await fetch(url);
-      const text = await res.text();
-      const lines = text.split('\n');
-      let total = 0, covered = 0;
-      for (const line of lines) {
-        if (line.startsWith("DA:")) {
-          total++;
-          if (parseInt(line.split(",")[1]) > 0) covered++;
+      const data = [];
+
+      for (const file of links) {
+        const response = await fetch(`data/${projectId}/${file}`);
+        const content = await response.text();
+        let coverage = null;
+        let label = file.replace(/\.[^.]+$/, '');
+
+        if (file.endsWith(".xml")) {
+          const dom = new DOMParser().parseFromString(content, "text/xml");
+          const lineRate = dom.querySelector("coverage")?.getAttribute("line-rate");
+          if (lineRate) coverage = parseFloat(lineRate) * 100;
+        } else if (file.endsWith(".info")) {
+          const lines = content.split("\n");
+          let total = 0, covered = 0;
+          for (const line of lines) {
+            if (line.startsWith("DA:")) {
+              total++;
+              if (parseInt(line.split(",")[1]) > 0) covered++;
+            }
+          }
+          if (total > 0) coverage = (covered / total) * 100;
+        }
+
+        if (coverage !== null) {
+          data.push({ label, value: coverage.toFixed(2) });
         }
       }
-      const coverage = total === 0 ? 0 : (covered / total) * 100;
-      return [Math.round(coverage), Math.round(100 - coverage)];
-    }
 
-    async function renderCharts() {
-      const [aCovered, aMissed] = await loadCoverageXML("data/project-a/coverage.xml");
-      const [bCovered, bMissed] = await loadLCOV("data/project-b/lcov.info");
+      const chartData = {
+        labels: data.map(d => d.label),
+        datasets: [{
+          label: "Cobertura (%)",
+          backgroundColor: "rgba(54, 162, 235, 0.6)",
+          borderColor: "rgba(54, 162, 235, 1)",
+          borderWidth: 1,
+          data: data.map(d => d.value)
+        }]
+      };
 
-      new Chart(document.getElementById('chart-a'), {
-        type: 'doughnut',
-        data: {
-          labels: ['Covered', 'Missed'],
-          datasets: [{
-            data: [aCovered, aMissed],
-            backgroundColor: ['#4CAF50', '#F44336']
-          }]
-        },
-        options: { responsive: true }
-      });
-
-      new Chart(document.getElementById('chart-b'), {
-        type: 'doughnut',
-        data: {
-          labels: ['Covered', 'Missed'],
-          datasets: [{
-            data: [bCovered, bMissed],
-            backgroundColor: ['#2196F3', '#FF9800']
-          }]
-        },
-        options: { responsive: true }
+      new Chart(document.getElementById(chartId), {
+        type: "bar",
+        data: chartData,
+        options: {
+          scales: {
+            y: { beginAtZero: true, max: 100 }
+          }
+        }
       });
     }
 
-    renderCharts();
+    fetchCoverageData("project-a", "chart-a");
+    fetchCoverageData("project-b", "chart-b");
   </script>
 </body>
 </html>
