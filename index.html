@@ -33,12 +33,8 @@
 
   <script>
     async function fetchCoverageData(projectId, chartId, tableId) {
-      const res = await fetch(`data/${projectId}/`);
-      const text = await res.text();
-      const parser = new DOMParser();
-      const html = parser.parseFromString(text, "text/html");
-      const links = [...html.querySelectorAll("a")].map(a => a.getAttribute("href"))
-        .filter(h => h.endsWith(".xml") || h.endsWith(".info"));
+      const res = await fetch(`data/${projectId}/index.json`);
+      const links = await res.json();
 
       const data = [];
 
