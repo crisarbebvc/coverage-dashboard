@@ -1,6 +1,5 @@
-
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -9,8 +8,12 @@
   <style>
     body { font-family: Arial, sans-serif; padding: 2rem; background: #f7f9fc; }
     h1 { color: #333; }
-    .project { margin-bottom: 3rem; }
+    .project { margin-bottom: 4rem; }
     canvas { max-width: 600px; }
+    table { border-collapse: collapse; margin-top: 1rem; width: 100%; max-width: 800px; }
+    th, td { border: 1px solid #ccc; padding: 0.5rem; text-align: left; }
+    th { background-color: #e0e7ff; }
+    tr:nth-child(even) { background-color: #f0f4ff; }
   </style>
 </head>
 <body>
@@ -19,20 +22,23 @@
   <div class="project" id="project-a">
     <h2>🐍 Project A (Python)</h2>
     <canvas id="chart-a"></canvas>
+    <div id="table-a"></div>
   </div>
 
   <div class="project" id="project-b">
     <h2>🟦 Project B (Node.js)</h2>
     <canvas id="chart-b"></canvas>
+    <div id="table-b"></div>
   </div>
 
   <script>
-    async function fetchCoverageData(projectId, chartId) {
+    async function fetchCoverageData(projectId, chartId, tableId) {
       const res = await fetch(`data/${projectId}/`);
       const text = await res.text();
       const parser = new DOMParser();
       const html = parser.parseFromString(text, "text/html");
-      const links = [...html.querySelectorAll("a")].map(a => a.getAttribute("href")).filter(h => h.endsWith(".xml") || h.endsWith(".info"));
+      const links = [...html.querySelectorAll("a")].map(a => a.getAttribute("href"))
+        .filter(h => h.endsWith(".xml") || h.endsWith(".info"));
 
       const data = [];
 
@@ -41,8 +47,12 @@
         const content = await response.text();
         let coverage = null;
         let label = file.replace(/\.[^.]+$/, '');
+        let author = "Desconocido";
 
         if (file.endsWith(".xml")) {
+          const commentMatch = content.match(/<!--\s*Author:\s*(.+?)\s*-->/i);
+          if (commentMatch) author = commentMatch[1];
+
           const dom = new DOMParser().parseFromString(content, "text/xml");
           const lineRate = dom.querySelector("coverage")?.getAttribute("line-rate");
           if (lineRate) coverage = parseFloat(lineRate) * 100;
@@ -59,10 +69,14 @@
         }
 
         if (coverage !== null) {
-          data.push({ label, value: coverage.toFixed(2) });
+          data.push({ label, value: coverage.toFixed(2), author });
         }
       }
 
+      // Ordenar por fecha descendente (suponiendo formato proyecto_YYYYMMDD.xml)
+      data.sort((a, b) => b.label.localeCompare(a.label));
+
+      // Crear gráfico
       const chartData = {
         labels: data.map(d => d.label),
         datasets: [{
@@ -83,10 +97,28 @@
           }
         }
       });
+
+      // Crear tabla con historial
+      const tableDiv = document.getElementById(tableId);
+      const table = document.createElement("table");
+      table.innerHTML = `
+        <thead>
+          <tr><th>Fecha</th><th>Cobertura (%)</th><th>Autor</th></tr>
+        </thead>
+        <tbody>
+          ${data.map(d => `
+            <tr>
+              <td>${d.label}</td>
+              <td>${d.value}</td>
+              <td>${d.author}</td>
+            </tr>`).join("")}
+        </tbody>
+      `;
+      tableDiv.appendChild(table);
     }
 
-    fetchCoverageData("project-a", "chart-a");
-    fetchCoverageData("project-b", "chart-b");
+    fetchCoverageData("project-a", "chart-a", "table-a");
+    fetchCoverageData("project-b", "chart-b", "table-b");
   </script>
 </body>
 </html>
